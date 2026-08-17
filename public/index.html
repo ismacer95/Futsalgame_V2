@@ -2,54 +2,81 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Futsal Online</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        * { box-sizing: border-box; touch-action: none; margin: 0; padding: 0; }
+        body { background-color: #020617; position: fixed; inset: 0; display: flex; flex-direction: column; font-family: sans-serif; }
+        .central-hud { height: 70px; background: #0f172a; display: flex; align-items: center; justify-content: center; z-index: 1000; color: white; gap: 15px; position: relative; border-bottom: 2px solid #334155; }
+        .view-container { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle, #0f172a 0%, #020617 100%); overflow: hidden; }
+        canvas { background-color: #064e3b; max-width: 100%; max-height: 100%; }
+        .overlay-screen { position: fixed; inset: 0; background: rgba(2, 6, 23, 0.98); z-index: 500; display: flex; flex-direction: column; align-items: center; padding: 20px; overflow-y: auto; }
+        .btn-primary { background: #2563eb; color: white; padding: 14px 25px; border-radius: 12px; font-weight: bold; font-size: 1.1rem; border: none; cursor: pointer; margin-top: 10px; width: 100%; max-width: 280px; }
+        .btn-red { background: #ef4444; }
+        .btn-green { background: #10b981; }
+        .input-box { padding: 12px; font-size: 1.2rem; width: 100%; text-align: center; border-radius: 8px; border: 2px solid #334155; background: #0f172a; color: white; font-weight: bold; margin-bottom: 15px; }
+    </style>
 </head>
-<body style="background:#020617; color:white; font-family:sans-serif; text-align:center;">
-    <div id="main-menu" style="padding:20px;">
-        <h1>FUTSAL ONLINE</h1>
-        <input type="text" id="player-name" placeholder="Nombre" style="padding:10px; width:100%; max-width:300px;"><br><br>
-        <input type="color" id="player-color" value="#3b82f6" style="width:100%; max-width:300px;"><br><br>
-        <button onclick="createRoom()" style="padding:15px; width:100%; max-width:300px;">CREAR SALA</button><br><br>
-        <input type="text" id="join-code" placeholder="CÓDIGO" style="padding:10px; width:100%; max-width:300px;"><br><br>
-        <button onclick="joinRoom()" style="padding:15px; width:100%; max-width:300px;">ENTRAR</button>
+<body>
+    <div id="main-menu" class="overlay-screen">
+        <h1 style="color:white; margin:20px;">FUTSAL ONLINE</h1>
+        <div style="background:#1e293b; padding:20px; border-radius:12px; width:100%; max-width:300px;">
+            <input type="text" id="player-name" class="input-box" placeholder="Nombre">
+            <input type="color" id="player-color" value="#3b82f6" style="width:100%; height:40px;">
+        </div>
+        <button class="btn-primary" onclick="createRoom()">CREAR SALA</button>
+        <input type="text" id="join-code" class="input-box" style="margin-top:20px;" placeholder="CÓDIGO">
+        <button class="btn-primary btn-green" onclick="joinRoom()">ENTRAR</button>
     </div>
-    <div id="lobby-screen" style="display:none; padding:20px;">
-        <h2 id="room-code-display">CÓDIGO: ----</h2>
-        <button id="btn-ready" onclick="socket.emit('setReady')">LISTO</button>
-        <button onclick="location.reload()">SALIR</button>
-    </div>
-    <canvas id="gameCanvas" width="500" height="900" style="background:#064e3b; width:100%; max-width:500px;"></canvas>
     
+    <div id="lobby-screen" class="overlay-screen" style="display:none;">
+        <h2 id="room-code-display" style="color:#10b981; margin:20px;">----</h2>
+        <button id="btn-ready" class="btn-primary" onclick="socket.emit('setReady')">LISTO</button>
+        <button class="btn-primary btn-red" onclick="leaveRoom()">SALIR</button>
+    </div>
+    
+    <div class="central-hud">
+        <div id="team-label" style="padding:5px; border-radius:5px; font-weight:bold;"></div>
+        <div id="timer" class="timer-box" style="background:#000; color:#fbbf24; padding:5px; font-family:monospace;">03:00</div>
+    </div>
+    
+    <div class="view-container">
+        <div id="goal-anim-container"></div>
+        <canvas id="gameCanvas" width="500" height="900"></canvas>
+    </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        // --- CAMBIA ESTO POR TU URL REAL ---
         const socket = io("https://futsalgame-v2.onrender.com");
-        
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         let myTeam = null, gameState = null;
 
         function createRoom() { socket.emit('createRoom', { name: document.getElementById('player-name').value, color: document.getElementById('player-color').value }); }
         function joinRoom() { socket.emit('joinRoom', { code: document.getElementById('join-code').value, name: document.getElementById('player-name').value, color: document.getElementById('player-color').value }); }
+        function leaveRoom() { socket.emit('leaveRoom'); location.reload(); }
 
         socket.on('init', (d) => {
             myTeam = d.team;
             document.getElementById('main-menu').style.display = 'none';
-            document.getElementById('lobby-screen').style.display = 'block';
+            document.getElementById('lobby-screen').style.display = 'flex';
             document.getElementById('room-code-display').innerText = "CÓDIGO: " + d.roomCode;
         });
 
-        socket.on('stateUpdate', (s) => { gameState = s; if(s.status === 'playing') document.getElementById('lobby-screen').style.display = 'none'; });
+        socket.on('stateUpdate', (s) => { 
+            gameState = s; 
+            if(s.status === 'playing') document.getElementById('lobby-screen').style.display = 'none'; 
+        });
 
         function render() {
             if (gameState) {
                 ctx.clearRect(0,0,500,900);
                 gameState.players.forEach(p => {
-                    ctx.beginPath(); ctx.arc(myTeam === 'p2' ? 500-p.x : p.x, myTeam === 'p2' ? 900-p.y : p.y, 20, 0, Math.PI*2);
-                    ctx.fillStyle = p.color; ctx.fill();
+                    ctx.beginPath(); ctx.arc(myTeam === 'p2' ? 500-p.x : p.x, myTeam === 'p2' ? 900-p.y : p.y, 22, 0, Math.PI*2);
+                    ctx.fillStyle = p.color; ctx.fill(); ctx.stroke();
                 });
-                ctx.beginPath(); ctx.arc(myTeam === 'p2' ? 500-gameState.ball.x : gameState.ball.x, myTeam === 'p2' ? 900-gameState.ball.y : gameState.ball.y, 10, 0, Math.PI*2);
+                ctx.beginPath(); ctx.arc(myTeam === 'p2' ? 500-gameState.ball.x : gameState.ball.x, myTeam === 'p2' ? 900-gameState.ball.y : gameState.ball.y, 11, 0, Math.PI*2);
                 ctx.fillStyle = 'white'; ctx.fill();
             }
             requestAnimationFrame(render);
