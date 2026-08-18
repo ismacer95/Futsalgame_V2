@@ -60,17 +60,20 @@ function createGameState() {
 function resetFormations(state) {
     const p1Pos = getFormationPositions('p1', state.teamInfo.p1.formation);
     const p2Pos = getFormationPositions('p2', state.teamInfo.p2.formation);
+    const c1 = state.teamInfo.p1.color;
+    const c2 = state.teamInfo.p2.color;
 
     if (state.players.length === 0) {
-        const c1 = state.teamInfo.p1.color; const c2 = state.teamInfo.p2.color;
         for(let i=0; i<5; i++) state.players.push({ id: i, x: p1Pos[i].x, y: p1Pos[i].y, team: 'p1', color: c1, target: null, immune: 0 });
         for(let i=0; i<5; i++) state.players.push({ id: i+5, x: p2Pos[i].x, y: p2Pos[i].y, team: 'p2', color: c2, target: null, immune: 0 });
     } else {
         for(let i=0; i<5; i++) {
             state.players[i].x = p1Pos[i].x; state.players[i].y = p1Pos[i].y; 
+            state.players[i].color = c1; // SOLUCIÓN DEL COLOR P1
             state.players[i].target = null; state.players[i].immune = 0;
             
             state.players[i+5].x = p2Pos[i].x; state.players[i+5].y = p2Pos[i].y; 
+            state.players[i+5].color = c2; // SOLUCIÓN DEL COLOR P2
             state.players[i+5].target = null; state.players[i+5].immune = 0;
         }
     }
@@ -230,7 +233,6 @@ io.on('connection', (socket) => {
         
         state.teamInfo[client.team].formation = newFormation;
         
-        // Si el juego está parado, aplicamos inmediatamente
         if (state.isOut || state.status === 'waiting' || state.isGoal) {
             resetFormations(state);
             if (state.isOut && !state.isGoal) placeKicker(state);
