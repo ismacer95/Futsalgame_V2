@@ -69,11 +69,11 @@ function resetFormations(state) {
     } else {
         for(let i=0; i<5; i++) {
             state.players[i].x = p1Pos[i].x; state.players[i].y = p1Pos[i].y; 
-            state.players[i].color = c1; // SOLUCIÓN DEL COLOR P1
+            state.players[i].color = c1; 
             state.players[i].target = null; state.players[i].immune = 0;
             
             state.players[i+5].x = p2Pos[i].x; state.players[i+5].y = p2Pos[i].y; 
-            state.players[i+5].color = c2; // SOLUCIÓN DEL COLOR P2
+            state.players[i+5].color = c2; 
             state.players[i+5].target = null; state.players[i+5].immune = 0;
         }
     }
