@@ -15,13 +15,30 @@ const CONFIG = { PLAYER_RAD: 22, BALL_RAD: 11, PLAYER_SPEED: 2.1, BALL_SPEED: 6.
 let rooms = {};
 let clients = {};
 
+function getFormationPositions(team, formationStr) {
+    let poses = [];
+    if (formationStr === '1-2-1') {
+        poses = [{x:250, y:845}, {x:250, y:750}, {x:120, y:600}, {x:380, y:600}, {x:250, y:480}];
+    } else if (formationStr === '3-1') {
+        poses = [{x:250, y:845}, {x:250, y:720}, {x:100, y:680}, {x:400, y:680}, {x:250, y:480}];
+    } else if (formationStr === '2-2') {
+        poses = [{x:250, y:845}, {x:160, y:680}, {x:340, y:680}, {x:160, y:500}, {x:340, y:500}];
+    } else if (formationStr === '4-0') {
+        poses = [{x:250, y:845}, {x:100, y:650}, {x:200, y:680}, {x:300, y:680}, {x:400, y:650}];
+    } else {
+        poses = [{x:250, y:845}, {x:250, y:750}, {x:120, y:600}, {x:380, y:600}, {x:250, y:480}];
+    }
+    if (team === 'p2') return poses.map(p => ({ x: WORLD_W - p.x, y: WORLD_H - p.y }));
+    return poses;
+}
+
 function createGameState() {
     return {
         status: 'waiting', 
         playersReady: { p1: false, p2: false },
         teamInfo: { 
-            p1: { name: 'AZUL', color: '#2563eb' }, 
-            p2: { name: 'ROJO', color: '#dc2626' } 
+            p1: { name: 'AZUL', color: '#2563eb', formation: '1-2-1' }, 
+            p2: { name: 'ROJO', color: '#dc2626', formation: '1-2-1' } 
         },
         players: [],
         ball: { x: 250, y: 450, vx: 0, vy: 0, lastTeam: 'p1' },
@@ -33,7 +50,6 @@ function createGameState() {
         turnToKick: null,
         outX: 0, 
         outY: 0, 
-        pickupTimeRemaining: 5, 
         kickTimeRemaining: 5,   
         statusMsg: '',
         winner: null,
@@ -41,28 +57,57 @@ function createGameState() {
     };
 }
 
+function resetFormations(state) {
+    const p1Pos = getFormationPositions('p1', state.teamInfo.p1.formation);
+    const p2Pos = getFormationPositions('p2', state.teamInfo.p2.formation);
+
+    if (state.players.length === 0) {
+        const c1 = state.teamInfo.p1.color; const c2 = state.teamInfo.p2.color;
+        for(let i=0; i<5; i++) state.players.push({ id: i, x: p1Pos[i].x, y: p1Pos[i].y, team: 'p1', color: c1, target: null, immune: 0 });
+        for(let i=0; i<5; i++) state.players.push({ id: i+5, x: p2Pos[i].x, y: p2Pos[i].y, team: 'p2', color: c2, target: null, immune: 0 });
+    } else {
+        for(let i=0; i<5; i++) {
+            state.players[i].x = p1Pos[i].x; state.players[i].y = p1Pos[i].y; 
+            state.players[i].target = null; state.players[i].immune = 0;
+            
+            state.players[i+5].x = p2Pos[i].x; state.players[i+5].y = p2Pos[i].y; 
+            state.players[i+5].target = null; state.players[i+5].immune = 0;
+        }
+    }
+}
+
+function placeKicker(state) {
+    let isGoalClearance = state.statusMsg.includes("META");
+    let kickerId = -1;
+    let minDist = Infinity;
+
+    state.players.forEach(p => {
+        if (p.team === state.turnToKick) {
+            if (isGoalClearance) {
+                if (p.id === 0 || p.id === 5) kickerId = p.id;
+            } else {
+                if (p.id !== 0 && p.id !== 5) {
+                    let d = Math.hypot(p.x - state.outX, p.y - state.outY);
+                    if (d < minDist) { minDist = d; kickerId = p.id; }
+                }
+            }
+        }
+    });
+
+    if (kickerId !== -1) {
+        let kicker = state.players.find(p => p.id === kickerId);
+        kicker.x = state.outX; kicker.y = state.outY;
+        state.ballOwnerId = kicker.id; 
+    }
+}
+
 function initMatch(state, isKickoff = false) {
-    const c1 = state.teamInfo.p1.color;
-    const c2 = state.teamInfo.p2.color;
-    
-    state.players = [
-        { id: 0, x: 250, y: 845, team: 'p1', color: c1, target: null, immune: 0 }, 
-        { id: 1, x: 250, y: 680, team: 'p1', color: c1, target: null, immune: 0 }, 
-        { id: 2, x: 140, y: 520, team: 'p1', color: c1, target: null, immune: 0 }, 
-        { id: 3, x: 360, y: 520, team: 'p1', color: c1, target: null, immune: 0 }, 
-        { id: 4, x: 250, y: 470, team: 'p1', color: c1, target: null, immune: 0 }, 
-        { id: 5, x: 250, y: 55,  team: 'p2', color: c2, target: null, immune: 0 }, 
-        { id: 6, x: 250, y: 220, team: 'p2', color: c2, target: null, immune: 0 }, 
-        { id: 7, x: 360, y: 380, team: 'p2', color: c2, target: null, immune: 0 }, 
-        { id: 8, x: 140, y: 380, team: 'p2', color: c2, target: null, immune: 0 }, 
-        { id: 9, x: 250, y: 430, team: 'p2', color: c2, target: null, immune: 0 }  
-    ];
+    resetFormations(state);
     state.ball = { x: 250, y: 450, vx: 0, vy: 0, lastTeam: state.ball.lastTeam };
     state.ballOwnerId = null;
     state.isGoal = false;
     state.isOut = false;
     state.turnToKick = null;
-    state.pickupTimeRemaining = 5;
     state.kickTimeRemaining = 5;
     state.statusMsg = '';
 
@@ -73,7 +118,7 @@ function initMatch(state, isKickoff = false) {
 }
 
 function triggerOut(state, x, y, label, forcedTeam = null) {
-    if (state.isOut || state.isGoal) return;
+    if (state.isGoal) return;
     state.isOut = true;
     state.turnToKick = forcedTeam || (state.ball.lastTeam === 'p1' ? 'p2' : 'p1');
     state.ball.vx = 0; state.ball.vy = 0;
@@ -82,11 +127,12 @@ function triggerOut(state, x, y, label, forcedTeam = null) {
     state.outY = y;
     state.ball.x = x; 
     state.ball.y = y;
-    state.pickupTimeRemaining = 5;
     state.kickTimeRemaining = 5;
     
-    const teamName = state.turnToKick === 'p1' ? state.teamInfo.p1.name : state.teamInfo.p2.name;
-    state.statusMsg = `${label} - ${teamName}`;
+    state.statusMsg = `${label} - ${state.turnToKick === 'p1' ? state.teamInfo.p1.name : state.teamInfo.p2.name}`;
+    
+    resetFormations(state);
+    placeKicker(state);
 }
 
 function handleEndLine(state, x, y, defendingTeam) {
@@ -107,15 +153,21 @@ function goal(state, team) {
     if (state.isGoal) return;
     state.isGoal = true;
     team === 'p1' ? state.score.p1++ : state.score.p2++;
-    state.statusMsg = '¡GOOOL!';
     state.ball.lastTeam = team;
     
+    const scorerName = team === 'p1' ? state.teamInfo.p1.name : state.teamInfo.p2.name;
+    state.statusMsg = `¡GOL DE ${scorerName}!\n${state.score.p1} - ${state.score.p2}`;
+    
     if (state.score.p1 >= GOAL_LIMIT || state.score.p2 >= GOAL_LIMIT) {
-        state.status = 'ended';
-        state.winner = state.score.p1 > state.score.p2 ? state.teamInfo.p1.name : state.teamInfo.p2.name;
-        state.playersReady = { p1: false, p2: false }; 
+        setTimeout(() => {
+            state.statusMsg = `¡FIN DEL PARTIDO!\nGANA ${scorerName}`;
+            setTimeout(() => { state.score = {p1:0, p2:0}; state.timeRemaining = 180; initMatch(state, true); }, 4000);
+        }, 3000);
     } else {
-        setTimeout(() => initMatch(state, true), 2500);
+        setTimeout(() => { 
+            initMatch(state); 
+            triggerOut(state, 250, 450, "SAQUE INICIO", team === 'p1' ? 'p2' : 'p1'); 
+        }, 3000);
     }
 }
 
@@ -124,7 +176,7 @@ io.on('connection', (socket) => {
     socket.on('createRoom', (data) => {
         const roomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
         rooms[roomCode] = createGameState();
-        rooms[roomCode].teamInfo.p1 = { name: data.name.toUpperCase().substring(0, 10), color: data.color };
+        rooms[roomCode].teamInfo.p1 = { name: data.name.toUpperCase().substring(0, 10), color: data.color, formation: data.formation || '1-2-1' };
         initMatch(rooms[roomCode], false);
         
         socket.join(roomCode);
@@ -145,7 +197,7 @@ io.on('connection', (socket) => {
             return;
         }
 
-        rooms[roomCode].teamInfo.p2 = { name: data.name.toUpperCase().substring(0, 10), color: data.color };
+        rooms[roomCode].teamInfo.p2 = { name: data.name.toUpperCase().substring(0, 10), color: data.color, formation: data.formation || '1-2-1' };
         initMatch(rooms[roomCode], false);
 
         socket.join(roomCode);
@@ -167,6 +219,21 @@ io.on('connection', (socket) => {
             state.lastTick = Date.now();
             initMatch(state, true);
         } else {
+            io.to(client.room).emit('stateUpdate', state);
+        }
+    });
+
+    socket.on('changeFormation', (newFormation) => {
+        const client = clients[socket.id];
+        if (!client || !rooms[client.room]) return;
+        const state = rooms[client.room];
+        
+        state.teamInfo[client.team].formation = newFormation;
+        
+        // Si el juego está parado, aplicamos inmediatamente
+        if (state.isOut || state.status === 'waiting' || state.isGoal) {
+            resetFormations(state);
+            if (state.isOut && !state.isGoal) placeKicker(state);
             io.to(client.room).emit('stateUpdate', state);
         }
     });
@@ -263,7 +330,6 @@ setInterval(() => {
         state.players.forEach(p => {
             if (p.immune > 0) p.immune--;
             
-            // Distancia mínima de 85px (3 metros) en saques
             if (state.isOut && p.team !== state.turnToKick) {
                 const dist = Math.hypot(p.x - state.outX, p.y - state.outY);
                 if (dist < 85) {
@@ -274,7 +340,7 @@ setInterval(() => {
                 }
             }
 
-            if (state.isOut && state.ballOwnerId === p.id) p.target = null;
+            if ((state.isOut && state.ballOwnerId === p.id) || state.isGoal) p.target = null;
 
             if (p.target) {
                 const dx = p.target.x - p.x, dy = p.target.y - p.y, d = Math.hypot(dx, dy);
@@ -293,66 +359,34 @@ setInterval(() => {
             for (let j = i + 1; j < state.players.length; j++) {
                 const p1 = state.players[i], p2 = state.players[j];
                 const dx = p2.x - p1.x, dy = p2.y - p1.y, dist = Math.hypot(dx, dy);
-                const minDist = CONFIG.PLAYER_RAD * 2;
-                if (dist < minDist) {
-                    const overlap = minDist - dist, nx = dx / dist, ny = dy / dist;
+                if (dist < CONFIG.PLAYER_RAD * 2) {
+                    const overlap = (CONFIG.PLAYER_RAD * 2) - dist, nx = dx / dist, ny = dy / dist;
                     p1.x -= nx * (overlap / 2); p1.y -= ny * (overlap / 2);
                     p2.x += nx * (overlap / 2); p2.y += ny * (overlap / 2);
                 }
             }
         }
 
-        if (state.isOut || state.isGoal) {
-            let ballOwner = state.players.find(p => p.id === state.ballOwnerId);
-            
-            if (!ballOwner && state.isOut) {
-                state.pickupTimeRemaining -= 1/60;
-                if (state.pickupTimeRemaining <= 0) {
-                    state.turnToKick = state.turnToKick === 'p1' ? 'p2' : 'p1';
-                    state.pickupTimeRemaining = 5;
-                    state.kickTimeRemaining = 5;
-                    const teamName = state.turnToKick === 'p1' ? state.teamInfo.p1.name : state.teamInfo.p2.name;
-                    state.statusMsg = `FALTA DE TIEMPO - SACA ${teamName}`;
-                } else {
-                    state.players.forEach(p => {
-                        if (p.team === state.turnToKick && Math.hypot(p.x - state.ball.x, p.y - state.ball.y) < 45) {
-                            state.ballOwnerId = p.id;
-                            state.kickTimeRemaining = 5; 
-                            p.x = state.outX;
-                            p.y = state.outY;
-                            p.target = null;
-                        }
-                    });
-                }
-            }
-            
-            if (ballOwner = state.players.find(p => p.id === state.ballOwnerId)) {
-                if (state.isOut) {
-                    state.ball.x = state.outX;
-                    state.ball.y = state.outY;
-                    state.kickTimeRemaining -= 1/60; 
-                    
-                    if (state.kickTimeRemaining <= 0) {
-                        state.turnToKick = state.turnToKick === 'p1' ? 'p2' : 'p1';
-                        state.ballOwnerId = null;
-                        state.pickupTimeRemaining = 5;
-                        state.kickTimeRemaining = 5;
-                        const teamName = state.turnToKick === 'p1' ? state.teamInfo.p1.name : state.teamInfo.p2.name;
-                        state.statusMsg = `FALTA DE TIEMPO - SACA ${teamName}`;
-                        ballOwner.immune = 120;
-                    }
-                } else {
-                    state.ball.x = ballOwner.x;
-                    state.ball.y = ballOwner.y;
-                }
-            }
-        } else {
+        if (state.isGoal) {
+            state.ball.vx *= 0.90; state.ball.vy *= 0.90;
+            state.ball.x += state.ball.vx; state.ball.y += state.ball.vy;
+        } 
+        else if (state.isOut) {
             let ballOwner = state.players.find(p => p.id === state.ballOwnerId);
             if (ballOwner) {
-                state.ball.x = ballOwner.x;
-                state.ball.y = ballOwner.y;
-                state.ball.vx = 0;
-                state.ball.vy = 0;
+                state.ball.x = state.outX; state.ball.y = state.outY; 
+                state.kickTimeRemaining -= 1/60; 
+                if (state.kickTimeRemaining <= 0) {
+                    state.turnToKick = state.turnToKick === 'p1' ? 'p2' : 'p1';
+                    state.ballOwnerId = null; ballOwner.immune = 120;
+                    triggerOut(state, state.outX, state.outY, "FALTA DE TIEMPO", state.turnToKick);
+                }
+            }
+        } 
+        else {
+            let ballOwner = state.players.find(p => p.id === state.ballOwnerId);
+            if (ballOwner) {
+                state.ball.x = ballOwner.x; state.ball.y = ballOwner.y; state.ball.vx = 0; state.ball.vy = 0;
                 
                 state.players.forEach(p => {
                     if (p.team !== ballOwner.team && p.immune === 0 && ballOwner.immune === 0) {
@@ -391,11 +425,11 @@ setInterval(() => {
                 });
             }
         }
+
         io.to(roomCode).emit('stateUpdate', state);
     }
 }, 1000 / 60);
 
-// CONFIGURACIÓN OBLIGATORIA PARA RENDER
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor de Futsal corriendo en el puerto ${PORT}`);
