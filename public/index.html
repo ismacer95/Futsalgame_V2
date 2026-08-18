@@ -35,29 +35,23 @@
         }
         .btn-tactics:disabled { background: #334155; border-color: #1e293b; color: #94a3b8; cursor: not-allowed; opacity: 0.5; }
 
+        .fullscreen-btn {
+            position: absolute; right: 10px; background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2); color: white; border-radius: 6px;
+            padding: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+
         .goal-dots { display: flex; gap: 6px; }
         .dot { width: 14px; height: 14px; border-radius: 50%; background: #1e293b; border: 1px solid rgba(255,255,255,0.1); transition: all 0.3s; }
 
         .timer-box {
-            background: #000;
-            padding: 4px 12px;
-            border-radius: 6px;
-            font-family: monospace;
-            font-size: 24px;
-            color: #fbbf24;
-            border: 1px solid #334155;
-            min-width: 85px;
-            text-align: center;
+            background: #000; padding: 4px 12px; border-radius: 6px; font-family: monospace;
+            font-size: 24px; color: #fbbf24; border: 1px solid #334155; min-width: 85px; text-align: center;
         }
 
         .view-container {
-            flex: 1;
-            position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: radial-gradient(circle, #0f172a 0%, #020617 100%);
-            overflow: hidden;
+            flex: 1; position: relative; display: flex; align-items: center;
+            justify-content: center; background: radial-gradient(circle, #0f172a 0%, #020617 100%); overflow: hidden;
         }
         canvas { display: block; background-color: #064e3b; max-width: 100%; max-height: 100%; }
 
@@ -71,8 +65,7 @@
 
         .overlay-screen {
             position: fixed; inset: 0; background: rgba(2, 6, 23, 0.98); z-index: 2000;
-            display: flex; flex-direction: column; align-items: center; padding: 20px;
-            overflow-y: auto;
+            display: flex; flex-direction: column; align-items: center; padding: 20px; overflow-y: auto;
         }
 
         .btn-primary {
@@ -98,12 +91,8 @@
             justify-content: space-between; align-items: center;
         }
 
-        .lobby-buttons-container {
-            display: flex; gap: 10px; width: 100%; max-width: 300px; margin-top: 15px;
-        }
-        .lobby-buttons-container button {
-            flex: 1; margin-top: 0; padding: 14px 0; font-size: 1.1rem;
-        }
+        .lobby-buttons-container { display: flex; gap: 10px; width: 100%; max-width: 300px; margin-top: 15px; }
+        .lobby-buttons-container button { flex: 1; margin-top: 0; padding: 14px 0; font-size: 1.1rem; }
     </style>
 </head>
 <body>
@@ -193,6 +182,11 @@
         <div class="goal-dots" id="dots2">
             <div id="d2-0" class="dot"></div><div id="d2-1" class="dot"></div><div id="d2-2" class="dot"></div>
         </div>
+        <button class="fullscreen-btn" onclick="toggleFullScreen()" title="Pantalla Completa">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+            </svg>
+        </button>
     </div>
 
     <!-- PISTA DE JUEGO -->
@@ -234,6 +228,16 @@
             formationInput.value = savedProfile.formation || "1-2-1";
         } else {
             nameInput.value = "Míster " + Math.floor(Math.random() * 99);
+        }
+
+        function toggleFullScreen() {
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+                else if (document.documentElement.webkitRequestFullscreen) document.documentElement.webkitRequestFullscreen();
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+                else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+            }
         }
 
         function saveProfileLocally() {
@@ -324,10 +328,31 @@
             }
             
             if (type === 'shoot') { 
-                const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
-                osc.connect(g); g.connect(audioCtx.destination);
-                osc.type = 'square'; osc.frequency.setValueAtTime(300, now); osc.frequency.exponentialRampToValueAtTime(40, now + 0.15); 
-                g.gain.setValueAtTime(1.0, now); g.gain.exponentialRampToValueAtTime(0.01, now + 0.15); osc.start(now); osc.stop(now + 0.15); 
+                const waveType = 'square';
+                const baseFreq = 587.33;
+                const targetFreq = 146.83;
+                const attack = 0.005;
+                const decay = 0.35;
+                const volume = 0.25;
+
+                const osc = audioCtx.createOscillator();
+                osc.type = waveType;
+                osc.frequency.setValueAtTime(baseFreq, now);
+                
+                if (targetFreq !== baseFreq) {
+                    osc.frequency.exponentialRampToValueAtTime(Math.max(10, targetFreq), now + attack + decay);
+                }
+
+                const gainNode = audioCtx.createGain();
+                gainNode.gain.setValueAtTime(0, now);
+                gainNode.gain.linearRampToValueAtTime(volume, now + attack);
+                gainNode.gain.exponentialRampToValueAtTime(0.0001, now + attack + decay);
+
+                osc.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+
+                osc.start(now);
+                osc.stop(now + attack + decay + 0.05);
             } 
             else if (type === 'steal') { 
                 const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
@@ -522,6 +547,7 @@
             }
         }
 
+        // FUNCIONES DE COORDENADAS (Crucial para Jugador 2)
         function rx(x) { return myTeam === 'p2' ? WORLD_W - x : x; }
         function ry(y) { return myTeam === 'p2' ? WORLD_H - y : y; }
 
@@ -531,7 +557,7 @@
             let y_raw = e.touches ? e.touches[0].clientY : e.clientY;
             let x = (x_raw - rect.left) * (WORLD_W / rect.width);
             let y = (y_raw - rect.top) * (WORLD_H / rect.height);
-            return { x: rx(x), y: ry(y) };
+            return { x: rx(x), y: ry(y) }; 
         }
 
         function handleStart(e) {
@@ -603,8 +629,8 @@
             ctx.beginPath(); ctx.arc(WORLD_W/2, WORLD_H/2, 75, 0, Math.PI*2); ctx.stroke();
 
             ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 8;
-            ctx.beginPath(); ctx.moveTo(160, 20); ctx.lineTo(340, 20); ctx.stroke(); 
-            ctx.beginPath(); ctx.moveTo(160, WORLD_H-20); ctx.lineTo(340, WORLD_H-20); ctx.stroke(); 
+            ctx.beginPath(); ctx.moveTo(rx(160), ry(20)); ctx.lineTo(rx(340), ry(20)); ctx.stroke(); 
+            ctx.beginPath(); ctx.moveTo(rx(160), ry(WORLD_H-20)); ctx.lineTo(rx(340), ry(WORLD_H-20)); ctx.stroke(); 
 
             if (drag.active && selectedPlayer) {
                 ctx.beginPath(); 
