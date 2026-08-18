@@ -45,13 +45,25 @@
         .dot { width: 14px; height: 14px; border-radius: 50%; background: #1e293b; border: 1px solid rgba(255,255,255,0.1); transition: all 0.3s; }
 
         .timer-box {
-            background: #000; padding: 4px 12px; border-radius: 6px; font-family: monospace;
-            font-size: 24px; color: #fbbf24; border: 1px solid #334155; min-width: 85px; text-align: center;
+            background: #000;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 24px;
+            color: #fbbf24;
+            border: 1px solid #334155;
+            min-width: 85px;
+            text-align: center;
         }
 
         .view-container {
-            flex: 1; position: relative; display: flex; align-items: center;
-            justify-content: center; background: radial-gradient(circle, #0f172a 0%, #020617 100%); overflow: hidden;
+            flex: 1;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle, #0f172a 0%, #020617 100%);
+            overflow: hidden;
         }
         canvas { display: block; background-color: #064e3b; max-width: 100%; max-height: 100%; }
 
@@ -65,7 +77,8 @@
 
         .overlay-screen {
             position: fixed; inset: 0; background: rgba(2, 6, 23, 0.98); z-index: 2000;
-            display: flex; flex-direction: column; align-items: center; padding: 20px; overflow-y: auto;
+            display: flex; flex-direction: column; align-items: center; padding: 20px;
+            overflow-y: auto;
         }
 
         .btn-primary {
@@ -78,6 +91,11 @@
         
         .btn-green { background: #10b981; }
         .btn-red { background: #ef4444; }
+
+        .btn-link {
+            background: transparent; border: 1px solid #3b82f6; color: #3b82f6;
+            padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; margin-bottom: 20px;
+        }
 
         .input-box {
             padding: 12px; font-size: 1.2rem; width: 100%; text-align: center;
@@ -129,7 +147,7 @@
         
         <div style="width: 100%; max-width: 300px; text-align: center;">
             <input type="text" id="join-code" class="input-box" placeholder="CÓDIGO (ej. A4F2)" maxlength="4" style="text-transform: uppercase; letter-spacing: 2px;">
-            <button class="btn-primary btn-green" onclick="joinRoom()">ENTRAR A SALA</button>
+            <button id="btn-join-room" class="btn-primary btn-green" onclick="joinRoom()">ENTRAR A SALA</button>
             <p id="menu-error" style="color: #ef4444; margin-top: 10px; font-weight: bold;"></p>
         </div>
 
@@ -142,7 +160,10 @@
     <!-- SALA DE ESPERA (Lobby) -->
     <div id="lobby-screen" class="overlay-screen" style="display: none; justify-content: center;">
         <h1 style="color: white; font-size: 30px; margin-bottom: 10px; font-style: italic;">SALA DE ESPERA</h1>
-        <h2 id="room-code-display" style="color: #10b981; font-size: 35px; letter-spacing: 3px; margin-bottom: 25px; background: #0f172a; padding: 10px 20px; border-radius: 10px; border: 1px dashed #10b981;">----</h2>
+        <h2 id="room-code-display" style="color: #10b981; font-size: 35px; letter-spacing: 3px; margin-bottom: 15px; background: #0f172a; padding: 10px 20px; border-radius: 10px; border: 1px dashed #10b981;">----</h2>
+        
+        <!-- BOTÓN PARA COPIAR EL ENLACE DIRECTO -->
+        <button id="btn-copy-link" class="btn-link" onclick="copyInviteLink()">📋 COPIAR ENLACE DE INVITACIÓN</button>
         
         <h3 id="lobby-title" style="color: #fbbf24; margin-bottom: 20px; font-size: 18px;"></h3>
         
@@ -228,6 +249,35 @@
             formationInput.value = savedProfile.formation || "1-2-1";
         } else {
             nameInput.value = "Míster " + Math.floor(Math.random() * 99);
+        }
+
+        // --- SISTEMA DE INVITACIÓN POR ENLACE ---
+        window.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get('code');
+            if (code) {
+                document.getElementById('join-code').value = code.toUpperCase();
+                // Opcional: Hacer scroll hasta el botón de unirse si estás en móvil
+                setTimeout(() => {
+                    document.getElementById('btn-join-room').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 500);
+            }
+        });
+
+        function copyInviteLink() {
+            const url = window.location.origin + window.location.pathname + "?code=" + myRoomCode;
+            navigator.clipboard.writeText(url).then(() => {
+                const btn = document.getElementById('btn-copy-link');
+                const oldText = btn.innerText;
+                btn.innerText = "¡ENLACE COPIADO!";
+                btn.style.background = "#10b981"; // Cambia a verde al copiar
+                btn.style.color = "white";
+                setTimeout(() => {
+                    btn.innerText = oldText;
+                    btn.style.background = "transparent";
+                    btn.style.color = "#3b82f6";
+                }, 2000);
+            }).catch(() => alert("Error al copiar."));
         }
 
         function toggleFullScreen() {
@@ -327,48 +377,9 @@
                 osc1.stop(now + startOffset + duration); osc2.stop(now + startOffset + duration);
             }
             
-            if (type === 'shoot') { 
-                const waveType = 'square';
-                const baseFreq = 587.33;
-                const targetFreq = 146.83;
-                const attack = 0.005;
-                const decay = 0.35;
-                const volume = 0.25;
-
-                const osc = audioCtx.createOscillator();
-                osc.type = waveType;
-                osc.frequency.setValueAtTime(baseFreq, now);
-                
-                if (targetFreq !== baseFreq) {
-                    osc.frequency.exponentialRampToValueAtTime(Math.max(10, targetFreq), now + attack + decay);
-                }
-
-                const gainNode = audioCtx.createGain();
-                gainNode.gain.setValueAtTime(0, now);
-                gainNode.gain.linearRampToValueAtTime(volume, now + attack);
-                gainNode.gain.exponentialRampToValueAtTime(0.0001, now + attack + decay);
-
-                osc.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-
-                osc.start(now);
-                osc.stop(now + attack + decay + 0.05);
-            } 
-            else if (type === 'steal') { 
-                const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
-                osc.connect(g); g.connect(audioCtx.destination);
-                osc.type = 'square'; osc.frequency.setValueAtTime(500, now); osc.frequency.setValueAtTime(900, now + 0.05); 
-                g.gain.setValueAtTime(0.5, now); g.gain.linearRampToValueAtTime(0.01, now + 0.1); osc.start(now); osc.stop(now + 0.1); 
-            } 
-            else if (type === 'whistle_short') { 
-                blow(0, 0.15); 
-            }
-            else if (type === 'whistle_goal') { 
-                blow(0, 0.15); blow(0.25, 0.45); 
-            }
-            else if (type === 'whistle_end') { 
-                blow(0, 0.15); blow(0.25, 0.15); blow(0.5, 0.6); 
-            }
+            if (type === 'whistle_short') { blow(0, 0.15); }
+            else if (type === 'whistle_goal') { blow(0, 0.15); blow(0.25, 0.45); }
+            else if (type === 'whistle_end') { blow(0, 0.15); blow(0.25, 0.15); blow(0.5, 0.6); }
         }
 
         function getPlayerData() {
@@ -397,6 +408,10 @@
             gameState = null; myTeam = null; myRoomCode = null; matchRecorded = false;
             ctx.clearRect(0, 0, WORLD_W, WORLD_H);
             document.getElementById('lobby-screen').style.display = 'none';
+            
+            // Si salimos, quitamos el ?code= de la URL por si recargan
+            window.history.pushState({}, document.title, window.location.pathname);
+            
             document.getElementById('main-menu').style.display = 'flex';
         }
 
@@ -449,18 +464,6 @@
 
                 localStorage.setItem('futsal_history', JSON.stringify(matchHistory));
                 renderHistory();
-            }
-
-            if (previousState && (gameState.status === 'playing' || gameState.status === 'ended')) {
-                if (gameState.ballOwnerId !== null && previousState.ballOwnerId !== null && gameState.ballOwnerId !== previousState.ballOwnerId) {
-                    const oldOwner = previousState.players.find(p => p.id === previousState.ballOwnerId);
-                    const newOwner = gameState.players.find(p => p.id === gameState.ballOwnerId);
-                    if (oldOwner && newOwner && oldOwner.team !== newOwner.team) playSound('steal');
-                }
-                if (previousState.ballOwnerId !== null && gameState.ballOwnerId === null) {
-                    const speed = Math.hypot(gameState.ball.vx, gameState.ball.vy);
-                    if (speed > 2) playSound('shoot');
-                }
             }
             
             localScore.p1 = gameState.score.p1;
@@ -547,7 +550,7 @@
             }
         }
 
-        // FUNCIONES DE COORDENADAS (Crucial para Jugador 2)
+        // FUNCIONES DE COORDENADAS (Para rotar la cámara al Jugador 2)
         function rx(x) { return myTeam === 'p2' ? WORLD_W - x : x; }
         function ry(y) { return myTeam === 'p2' ? WORLD_H - y : y; }
 
@@ -606,7 +609,9 @@
         window.addEventListener('mouseup', handleEnd);
 
         function render() {
-            if (!gameState) { requestAnimationFrame(render); return; }
+            if (!gameState || gameState.status !== 'playing') {
+                requestAnimationFrame(render); return;
+            }
 
             ctx.clearRect(0, 0, WORLD_W, WORLD_H);
             
